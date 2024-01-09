@@ -560,7 +560,8 @@ sub initGenerator {
         grammar => $self->grammar(),
         varchar_length => $self->config->property('varchar-length'),
         mask => $self->config->mask,
-        mask_level => $self->config->property('mask-level')
+        mask_level => $self->config->property('mask-level'),
+        starting_rule => $self->config->property('starting-rule')
     );
 
     return STATUS_ENVIRONMENT_FAILURE if not defined $self->generator();

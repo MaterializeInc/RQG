@@ -40,7 +40,8 @@ my $opt_result = GetOptions($options,
 			    'seed=s',
 			    'mask=i',
 			    'mask-level=i',
-			    'dsn=s');
+			    'dsn=s',
+                'starting-rule=s');
 
 help() if !$opt_result;
 
@@ -53,7 +54,8 @@ my $config = GenTest::Properties->new(options => $options,
 						'seed',
 						'mask',
 						'mask-level',
-						'dsn'],
+						'dsn',
+                        'starting-rule'],
 				      required => ['grammar'],
 				      help => \&help);
 
@@ -67,7 +69,8 @@ my $generator = GenTest::Generator::FromGrammar->new(
     grammar_file => $config->grammar,
     seed => $seed,
     mask => $config->mask,
-    mask_level => $config->property('mask-level')
+    mask_level => $config->property('mask-level'),
+    starting_rule => $config->property('starting-rule')
     );
 
 return STATUS_ENVIRONMENT_FAILURE if not defined $generator;
@@ -105,6 +108,7 @@ sub help {
 $0 - Generate random queries from an SQL grammar and pipe them to STDOUT
 
         --grammar   : Grammar file to use for generating the queries (REQUIRED);
+        --starting-rule: Custom starting rule for generating queries
         --seed      : Seed for the pseudo-random generator
         --queries   : Numer of queries to generate (default $DEFAULT_QUERIES);
         --dsn       : The DSN of the database that will be used to resolve rules such as _table , _field

@@ -67,6 +67,7 @@ sub new {
         my $grammar = $generator->grammar();
         my $top = $grammar->topGrammar($generator->maskLevel(),
                                        "thread".$generator->threadId(),
+                                       $generator->startingRule(),
                                        "query");
         my $maskedTop = $top->mask($generator->mask());
         $generator->[GENERATOR_MASKED_GRAMMAR] = $grammar->patch($maskedTop);
@@ -135,7 +136,14 @@ sub next {
 	# If no init starting rule, we look for rules named "threadN" or "query"
 
 	if (not defined $starting_rule) {
-		if (exists $grammar_rules->{"thread".$generator->threadId()}) {
+		if (defined $generator->[GENERATOR_STARTING_RULE]) {
+			if (exists $grammar_rules->{$generator->[GENERATOR_STARTING_RULE]}) {
+				$starting_rule = $generator->[GENERATOR_STARTING_RULE];
+			} else {
+				say("Rule $generator->[GENERATOR_STARTING_RULE] does not exist in grammar.");
+				return undef;
+			}
+		} elsif (exists $grammar_rules->{"thread".$generator->threadId()}) {
 			$starting_rule = $grammar_rules->{"thread".$generator->threadId()}->name();
 		} else {
 			$starting_rule = "query";

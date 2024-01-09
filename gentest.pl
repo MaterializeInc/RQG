@@ -72,6 +72,7 @@ my $opt_result = GetOptions($options,
                             'report-xml-tt-type=s',
                             'report-xml-tt-dest=s',
                             'seed=s',
+                            'starting-rule=s',
                             'mask=i',
                             'mask-level=i',
                             'rows=s',
@@ -125,6 +126,7 @@ my $config = GenTest::Properties->new(
               'report-xml-tt-type',
               'report-xml-tt-dest',
               'seed',
+              'starting-rule',
               'mask',
               'mask-level',
               'rows',
@@ -191,6 +193,7 @@ $0 - Testing via random query generation. Options:
         --queries   : Numer of queries to execute per thread (default $DEFAULT_QUERIES);
         --duration  : Duration of the test in seconds (default $DEFAULT_DURATION seconds);
         --grammar   : Grammar file to use for generating the queries (REQUIRED);
+        --starting-rule : Starting grammar rule to use;
         --redefine  : Grammar file(s) to redefine and/or add rules to the given grammar
         --seed      : PRNG seed (default 1). If --seed=time, the current time will be used.
         --rpl_mode  : Replication mode
