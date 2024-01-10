@@ -1,33 +1,16 @@
+explain:
+	EXPLAIN query
+;
+
 query:
-#	insert |
-	view_source
-;
-
-#query:
-#	ddl | insert | insert | select_view
-#;
-
-ddl:
-	drop_view | create_view
-;
-
-drop_view:
-	DROP VIEW view_name
-;
-
-create_view:
-	CREATE /*executor1 MATERIALIZED */ VIEW view_name AS view_source order_by_limit
-;
-
-insert:
-	INSERT INTO table_name VALUES ( value , value )
+	select
 ;
 
 value:
 	_digit | _digit | _digit | _digit | NULL
 ;
 
-view_source:
+select:
 	single_select |
 	single_select union_except_intersect all_distinct single_select
 ;
@@ -41,20 +24,17 @@ all_distinct:
 ;
 
 single_select:
-	SELECT distinct select_item_list, aggregate_list FROM table_name AS a1 left_right JOIN table_name AS a2 ON ( cond ) WHERE cond_list GROUP BY group_by_list having
+	SELECT distinct select_item_list, aggregate_list FROM source AS a1 left_right JOIN source AS a2 ON ( cond_no_subquery ) WHERE cond_list GROUP BY group_by_list |
+	SELECT distinct select_item_list, aggregate_list FROM source AS a1 left_right JOIN source AS a2 USING ( col_list ) WHERE cond_list GROUP BY group_by_list
 ;
 
-having:
-#	| | | | HAVING having_cond_list
-;
-
-having_cond_list:
-	having_cond |
-	having_cond and_or having_cond_list
-;
-
-having_cond:
-	cond | aggregate_cond
+source:
+	table_name | table_name | table_name | values_source |
+	( SELECT select_item AS f1 , select_item AS f2 FROM table_name AS a1 left_right JOIN table_name AS a2 ON ( cond ) WHERE cond_list order_by_2_limit_subquery ) |
+	( SELECT select_item AS f1 , select_item AS f2 FROM table_name AS a1 left_right JOIN table_name AS a2 USING ( col_list ) WHERE cond_list order_by_2_limit_subquery ) |
+	( SELECT aggregate_item_no_window AS f1 , aggregate_item_no_window AS f2 FROM table_name AS a1 left_right JOIN table_name AS a2 ON ( cond ) WHERE cond_list order_by_2_limit_subquery ) |
+	( SELECT aggregate_item_no_window AS f1 , aggregate_item_no_window AS f2 FROM table_name AS a1 left_right JOIN table_name AS a2 USING ( col_list ) WHERE cond_list order_by_2_limit_subquery ) |
+	( SELECT select_item AS f1 , aggregate_item_no_window AS f2 FROM table_name AS a1 left_right JOIN table_name AS a2 ON ( cond ) WHERE cond_list GROUP BY 1 order_by_2_limit_subquery )
 ;
 
 cond_list:
@@ -67,13 +47,47 @@ and_or:
 ;
 
 cond:
+	cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_no_subquery |
+	cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_no_subquery |
+	cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_no_subquery | cond_subquery
+;
+
+cond_no_subquery:
+	select_item not IN ( in_list ) |
 	select_item cmp_op select_item |
-	select_item IS not NULL
+	select_item IS not NULL |
+	NOT ( cond_no_subquery ) 
+;
+
+cond_subquery:
+	select_item cmp_op ( SELECT distinct col_or_aggregate_alias FROM ( select ) AS dt ORDER BY 1 LIMIT 1 OFFSET _digit ) |
+	select_item cmp_op any_all ( SELECT distinct col_or_aggregate_alias FROM ( select ) AS dt order_by_limit_subquery ) | 
+	select_item not IN ( SELECT distinct col_or_aggregate_alias AS x1 FROM ( select ) AS dt order_by_limit_subquery ) |
+	not EXISTS ( select ) 
+;
+
+order_by_limit_subquery:
+	ORDER BY 1 |
+	ORDER BY 1 LIMIT limit_value offset
+;
+
+order_by_2_limit_subquery:
+	ORDER BY 1 , 2 |
+	ORDER BY 1 , 2 LIMIT limit_value offset
+;
+
+limit_value:
+	0 | 1 | _digit
+;
+
+any_all:
+	ANY | ALL
 ;
 
 aggregate_cond:
-	aggregate_item cmp_op _digit |
-	aggregate_item IS not NULL
+	aggregate_item_no_window cmp_op _digit |
+	aggregate_item_no_window IS not NULL |
+	NOT ( aggregate_cond )
 ;
 
 not:
@@ -81,19 +95,22 @@ not:
 ;
 
 cmp_op:
-	= | > | <
+	= | = | > | <
 ;
 
 left_right:
-	| LEFT | RIGHT
+	| | LEFT | RIGHT
 ;
 
 aggregate_list:
-	aggregate_item AS agg1 , aggregate_item AS agg2
+	(aggregate_item_no_window) AS agg1 , (aggregate_item_no_window) AS agg2
 ;
 
-aggregate_item:
-	CAST(aggregate_func ( distinct select_item ) AS DOUBLE PRECISION)
+aggregate_item_no_window:
+	aggregate_func ( distinct select_item ) |
+	aggregate_func ( distinct select_item ) |
+	aggregate_func ( distinct select_item ) |
+	aggregate_func ( distinct select_item )
 ;
 
 aggregate_func:
@@ -101,7 +118,22 @@ aggregate_func:
 ;
 
 select_item_list:
-	select_item AS c1, select_item AS c2, select_item AS c3
+	(a1.f1) AS c1, (a2.f1) AS c2, (a1.f2) AS c3 |
+	(select_item) AS c1, (select_item) AS c2, (select_item) AS c3
+;
+
+select_item_in_list:
+	select_item , select_item |
+	select_item , select_item_in_list
+;
+
+in_list:
+	in_item , in_item |
+	in_item , in_list
+;
+
+in_item:
+	_digit
 ;
 
 select_item:
@@ -109,12 +141,15 @@ select_item:
 	col_reference |
 	col_reference + select_item |
 	col_reference + col_reference |
-	CAST( _digit AS DOUBLE PRECISION )
+    NULLIF ( col_reference , col_reference )
 ;
 
 order_by_limit:
-	| order_by
-	| order_by_full limit
+	order_by_full limit
+;
+
+offset:
+	| OFFSET _digit
 ;
 
 order_by:
@@ -135,7 +170,6 @@ order_by_item:
 ;
 
 limit:
-	LIMIT _digit | 
 	LIMIT _digit OFFSET _digit
 ;
 
@@ -147,8 +181,28 @@ alias:
 	a1 | a2
 ;
 
+col_list:
+	f1 | f2 |
+	f2 , f1 | f1 , f2
+;
+
+# Give preference to the NOT NULL column, to reflect for the fact that
+# most columns/datasets are NOT NULL, e.g. DBT/TPC
+
 col_name:
-	f1 | f2
+	f1 | f2 | f2
+;
+
+col_alias:
+	c1 | c2 | c3;
+;
+
+aggregate_alias:
+	agg1 | agg2
+;
+
+col_or_aggregate_alias:
+	col_alias | aggregate_alias
 ;
 
 group_by_list:
@@ -160,18 +214,13 @@ group_by_item:
 ;
 
 distinct:
-#	| DISTINCT	 # https://github.com/MaterializeInc/materialize/issues/6021
-;
-
-select_view:
-	SELECT * from view_name
-#	/*executor1 AS OF NOW() */
-;
-
-view_name:
-	v1 | v2 | v3 | v4 | v5 | v6 | v7 | v8 | v9 | v10
+	| | | | DISTINCT
 ;
 
 table_name:
-	t1 | t2
+	t1 | t2 | pk1 | pk2
+;
+
+values_source:
+	(SELECT * FROM ( VALUES (1,2) ) table_name (f1,f2))
 ;
