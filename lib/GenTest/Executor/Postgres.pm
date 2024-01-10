@@ -49,8 +49,7 @@ sub init {
         say("connect() to dsn ".$self->dsn()." failed: ".$DBI::errstr);
         return STATUS_ENVIRONMENT_FAILURE;
     }
-    
-	$self->setDbh($dbh);	
+ 	$self->setDbh($dbh);	
 
     $self->defaultSchema($self->currentSchema());
     say "Default schema: ".$self->defaultSchema();
@@ -67,40 +66,30 @@ my %acceptedErrors = (
     );
 
 sub execute {
-    my ($self, $query, $silent) = @_;
+    my ($self, $orig_query, $silent) = @_;
 
     my $dbh = $self->dbh();
 
     return GenTest::Result->new( 
-        query => $query, 
+        query => $orig_query, 
         status => STATUS_UNKNOWN_ERROR ) 
         if not defined $dbh;
 
     # Filter out any /*executor */ comments that do not pertain to this particular Executor/DBI
     my $executor_id = $self->id();
+
+    my $query = $orig_query;
     $query =~ s{/\*executor$executor_id (.*?) \*/}{$1}sg;
     $query =~ s{/\*executor.*?\*/}{}sgo;
-    
+
     $query = $self->preprocess($query);
-    
-    ## This may be generalized into a translator which is a pipe
-
-    my @pipe = (GenTest::Translator::Mysqldump2pgsql->new(),
-                GenTest::Translator::MysqlDML2pgsql->new());
-
-    foreach my $p (@pipe) {
-        $query = $p->translate($query);
-        return GenTest::Result->new( 
-            query => $query, 
-            status => STATUS_WONT_HANDLE ) 
-            if not $query;
-    }
-
-    # Autocommit ?
 
     my $db = $self->getName()." ".$self->version();
 
     my $start_time = Time::HiRes::time();
+
+    chomp($query);
+    say(sprintf("QUERY[%-10s][%s], %s;", $$, $executor_id, $query)) if rqg_debug();
 
     my $sth = $dbh->prepare($query);
 
@@ -123,7 +112,6 @@ sub execute {
 
 
     my $affected_rows = $sth->execute();
-
     
     my $end_time = Time::HiRes::time();
     
@@ -138,7 +126,7 @@ sub execute {
 
             $self->[EXECUTOR_ERROR_COUNTS]->{$errstr}++;
             return GenTest::Result->new(
-                query       => $query,
+                query       => $orig_query,
                 status      => $self->findStatus($dbh->state()),
                 err         => $dbh->err(),
                 errstr      => $dbh->errstr(),
@@ -149,7 +137,7 @@ sub execute {
         } else {
             ## E.g. DROP on non-existing table
             return GenTest::Result->new(
-                query       => $query,
+                query       => $orig_query,
                 status      => STATUS_OK,
                 affected_rows => 0,
                 start_time  => $start_time,
@@ -160,7 +148,7 @@ sub execute {
     } elsif ((not defined $sth->{NUM_OF_FIELDS}) || ($sth->{NUM_OF_FIELDS} == 0)) {
         ## DDL/UPDATE/INSERT/DROP/DELETE
         $result = GenTest::Result->new(
-            query       => $query,
+            query       => $orig_query,
             status      => STATUS_OK,
             affected_rows   => $affected_rows,
             start_time  => $start_time,
@@ -180,7 +168,7 @@ sub execute {
         }   
         
         $result = GenTest::Result->new(
-            query       => $query,
+            query       => $orig_query,
             status      => STATUS_OK,
             affected_rows   => $affected_rows,
             data        => \@data,
@@ -189,6 +177,7 @@ sub execute {
             );
         
         $self->[EXECUTOR_ERROR_COUNTS]->{'(no error)'}++ if rqg_debug() && !$silent;
+
     }
 
     $sth->finish();
@@ -199,7 +188,22 @@ sub execute {
 sub findStatus {
     my ($self, $state) = @_;
     if (($state eq "22000") || ($state eq '08000')) {
-	return STATUS_SERVER_CRASHED;
+
+	my $dbh =  DBI->connect($self->dsn(), undef, undef,
+                            {
+                                PrintError => 0,
+                                PrintWarn => 0,
+                                RaiseError => 0,
+                                AutoCommit => 1}
+        );
+
+    if (not defined $dbh) {
+        say("connect() to dsn ".$self->dsn()." failed: ".$DBI::errstr);
+        return STATUS_ENVIRONMENT_FAILURE;
+    }
+    
+	$self->setDbh($dbh);	
+	return STATUS_SYNTAX_ERROR;
     } elsif (($state eq '42000') || ($state eq '42601')) {
 	return STATUS_SYNTAX_ERROR;
     } else {
