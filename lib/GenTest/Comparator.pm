@@ -20,6 +20,8 @@ package GenTest::Comparator;
 
 use strict;
 
+use Scalar::Util qw(looks_like_number);
+
 use GenTest;
 use GenTest::Constants;
 use GenTest::Result;
@@ -59,8 +61,34 @@ sub compare {
 			my $data1 = $resultset1->data();
 			my $data2 = $resultset2->data();
 			return STATUS_LENGTH_MISMATCH if $#$data1 != $#$data2;
-			my $data1_sorted = join('<row>', sort map { join('<col>', map { defined $_ ? ($_ != 0 ? sprintf("%.4f", $_) : $_) : 'NULL' } @$_) } @$data1);
-			my $data2_sorted = join('<row>', sort map { join('<col>', map { defined $_ ? ($_ != 0 ? sprintf("%.4f", $_) : $_) : 'NULL' } @$_) } @$data2);
+
+			my $data1_sorted = join('<row>', sort map { join('<col>', map { defined $_ ? (looks_like_number($_) ? sprintf("%.6f", $_) : $_) : 'NULL' } @$_) } @$data1);
+			my $data2_sorted = join('<row>', sort map { join('<col>', map { defined $_ ? (looks_like_number($_) ? sprintf("%.6f", $_) : $_) : 'NULL' } @$_) } @$data2);
+
+			if ($resultset1->query() =~ m{EXPLAIN}sgio) {
+				$data1_sorted =~ s{u\d+}{<U>}sgo;
+				$data2_sorted =~ s{u\d+}{<U>}sgo;
+				$data1_sorted =~ s{#\d+}{<#>}sgo;
+				$data2_sorted =~ s{#\d+}{<#>}sgo;
+			}
+
+
+			$data1_sorted =~ s{ day(s|)}{.0000}sgio;
+			$data2_sorted =~ s{ day(s|)}{.0000}sgio;
+
+
+			$data1_sorted =~ s{By\[.*?\]\]}{}sgio;
+			$data2_sorted =~ s{By\[.*?\]\]}{}sgio;
+
+			$data1_sorted =~ s{\{\}}{NULL}sgo;
+			$data2_sorted =~ s{\{\}}{NULL}sgo;
+
+			$data1_sorted =~ s{, }{,}sgo;
+			$data2_sorted =~ s{, }{,}sgo;
+
+			$data1_sorted =~ s{: }{:}sgo;
+			$data2_sorted =~ s{: }{:}sgo;
+
 			return STATUS_CONTENT_MISMATCH if $data1_sorted ne $data2_sorted;
 		}
 	}
@@ -74,15 +102,26 @@ sub dumpDiff {
 
 	foreach my $i (0..1) {
 		return undef if not defined $results[$i]->data();
-		my $data_sorted = join("\n", sort map { join("\t", map { defined $_ ? $_ : "NULL" } @$_) } @{$results[$i]->data()});
+		my $data_sorted = join("\n", sort map { join("\t", map { defined $_ ? (looks_like_number($_) ? sprintf("%.6f", $_) : $_) : "NULL" } @$_) } @{$results[$i]->data()});
 		$data_sorted = $data_sorted."\n" if $data_sorted ne '';
+
+		if ($results[0]->query() =~ m{EXPLAIN}sgio) {
+			$data_sorted =~ s{u\d+}{<U>}sgo;
+			$data_sorted =~ s{#\d+}{<#>}sgo;
+		}
+
+		$data_sorted =~ s{ day(s|)}{.0000}sgio;
+
+		$data_sorted =~ s{, }{,}sgio;
+		$data_sorted =~ s{: }{,}sgio;
+
 		$files[$i] = tmpdir()."/randgen".abs($$)."-".time()."-server".$i.".dump";
 		open (FILE, ">".$files[$i]);
 		print FILE $data_sorted;
 		close FILE;
 	}
 	
-	my $diff_cmd = "diff -u $files[0] $files[1]";
+	my $diff_cmd = "diff -u -w $files[1] $files[0]";
 
 	open (DIFF, "$diff_cmd|");
 	while (<DIFF>) {
