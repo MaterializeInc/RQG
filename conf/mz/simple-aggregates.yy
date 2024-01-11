@@ -16,7 +16,8 @@ select:
 ;
 
 union_except_intersect:
-	UNION | EXCEPT | INTERSECT
+	UNION | EXCEPT
+	# | INTERSECT # https://github.com/MaterializeInc/materialize/issues/24358
 ;
 
 all_distinct:
