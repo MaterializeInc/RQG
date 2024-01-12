@@ -71,7 +71,7 @@ sub simplify {
 	my $root = $query_obj->root();
 	
 	if (not defined $root) {
-		warn("Unable to parse query at position ".$query_obj->getPos()." at token ".Dumper($query_obj->getActual())." expected ".Dumper($query_obj->getExpected()));
+		warn("Unable to parse query at position ".$query_obj->getPos()." at token ".Dumper($query_obj->getActual()));
 		return undef;
 	}
 
