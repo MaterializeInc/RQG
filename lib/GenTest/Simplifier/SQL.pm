@@ -1,5 +1,4 @@
 # Copyright (C) 2008-2009 Sun Microsystems, Inc. All rights reserved.
-# Copyright (c) 2013, Monty Program Ab.
 # Use is subject to license terms.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -23,13 +22,15 @@ use GenTest;
 @ISA = qw(GenTest);
 
 use strict;
-use Carp;
+
 use lib 'lib';
+use Data::Dumper;
 use DBIx::MyParsePP;
 use DBIx::MyParsePP::Rule;
 use GenTest::Constants;
 
 my $empty_child = DBIx::MyParsePP::Rule->new();
+my $true_child = DBIx::MyParsePP::Token->new("TRUE_SYM", "TRUE");
 my $myparse = DBIx::MyParsePP->new();
 
 use constant SIMPLIFIER_ORACLE		=> 0;
@@ -59,7 +60,7 @@ sub simplify {
 	return $initial_query if $initial_query =~ m{^\s*$}sio;
 
 	if ($simplifier->oracle($initial_query) != ORACLE_ISSUE_STILL_REPEATABLE) {
-		carp("Initial query $initial_query failed to reproduce the same issue.");
+		say("Initial query $initial_query failed oracle check.");
 		return undef;
 	}
 
@@ -70,7 +71,7 @@ sub simplify {
 	my $root = $query_obj->root();
 	
 	if (not defined $root) {
-		carp("Unable to parse query");
+		warn("Unable to parse query at position ".$query_obj->getPos()." at token ".Dumper($query_obj->getActual())." expected ".Dumper($query_obj->getExpected()));
 		return undef;
 	}
 
@@ -84,7 +85,7 @@ sub simplify {
 	my $final_query = $root_shrunk->toString();
 
 	if ($simplifier->oracle($final_query) != ORACLE_ISSUE_STILL_REPEATABLE) {
-		warn("Final query $final_query failed to reproduce the same issue.");
+		say("Final query $final_query failed oracle check");
 		return undef;
 	} else {
 		return $final_query;
@@ -103,15 +104,15 @@ sub descend {
 	# We start chopping from the end in order to remove GROUP BY/HAVING, etc., before we 
 	# start chewing on the SELECT list and the list of joined tables
  
-	foreach my $child_id (reverse (0..$#children)) {
+	foreach my $child_id (reverse(0..$#children)) {
 		my $orig_child = $children[$child_id];
 		
 		# Do not remove the AS from "table1 AS alias1"
-		next if $orig_child->print() =~ m{^\s*AS}so;
+#		next if $orig_child->print() =~ m{^\s*AS}so;
 
 		# Do not further simplify WHERE or ON expressions that are already simple equalities/inequalities
 		# This avoids generating unrealistic expressions containing only a single field, such as t1 JOIN t2 ON (t1.f1)
-		next if $orig_child->print() =~ m{^\s*[A-Z0-9_`' .]*\s*(=|>|<|!=|<>|<=>|<=|>=)\s*[A-Z0-9_`' .]*\s*$}sgio;
+#		next if $orig_child->print() =~ m{^\s*[A-Z0-9_`' .]*\s*(=|>|<|!=|<>|<=>|<=|>=)\s*[A-Z0-9_`' .]*\s*$}sgio;
 		
 		# No not remove FORCE KEY. This is sometimes useful when simplifying optimizer bugs 
 		# that use InnoDB tables and have unstable query plans due to unstable InnoDB row estimates
@@ -119,21 +120,7 @@ sub descend {
 
 		my $orig_parent = $grandparent->[$parent_id + 1];
 
-		if (defined $grandparent) {	
-			# replace parent with child
-			my $child_str = $orig_child->toString();
-			$grandparent->[$parent_id + 1] = $orig_child;
-			my $new_query1 = $query_root->toString();
-			$grandparent->[$parent_id + 1] = $orig_parent;
-
-			if ($simplifier->oracle($new_query1) == ORACLE_ISSUE_STILL_REPEATABLE) {
-				# Problem is still present, make tree modification permanent
-				$grandparent->[$parent_id + 1] = $orig_child;
-				$simplifier->descend($orig_child, $grandparent, $parent_id);
-			}
-		}
-
-		# remove the child altogether
+		# Attempt to remove the child altogether
 
 		$parent->[$child_id + 1] = $empty_child;
 		my $new_query2 = $query_root->toString();
@@ -149,8 +136,36 @@ sub descend {
 		if ($simplifier->oracle($new_query2) == ORACLE_ISSUE_STILL_REPEATABLE) {
 			# Problem is still present, make tree modification permanent
 			$parent->[$child_id + 1] = $empty_child;
+			next;
+		}
+
+		# Attempt to replace the child with TRUE
+
+		$parent->[$child_id + 1] = $true_child;
+		my $new_query3 = $query_root->toString();
+		$parent->[$child_id + 1] = $orig_child;
+		my $removed_fragment3 = $orig_child->toString();
+
+		if ($simplifier->oracle($new_query3) == ORACLE_ISSUE_STILL_REPEATABLE) {
+			# Problem is still present, make tree modification permanent
+			$parent->[$child_id + 1] = $true_child;
+			next;
 		} else {
 			$simplifier->descend($orig_child, $parent, $child_id);
+		}
+
+		if (defined $grandparent) {
+			# replace parent with child
+			my $child_str = $orig_child->toString();
+			$grandparent->[$parent_id + 1] = $orig_child;
+			my $new_query1 = $query_root->toString();
+			$grandparent->[$parent_id + 1] = $orig_parent;
+
+			if ($simplifier->oracle($new_query1) == ORACLE_ISSUE_STILL_REPEATABLE) {
+				# Problem is still present, make tree modification permanent
+				$grandparent->[$parent_id + 1] = $orig_child;
+				$simplifier->descend($orig_child, $grandparent, $parent_id);
+			}
 		}
 	}
 }
@@ -181,7 +196,7 @@ sub oracle {
 sub DESTROY {
 	my $simplifier = shift;
 	
-	my $tmpfile = tmpdir().abs($$).'-'.time();
+	my $tmpfile = tmpdir().$$.'-'.time();
 
 	open (PASSING, ">$tmpfile-passing.txt");
 	print PASSING join (";\n", @{$simplifier->[SIMPLIFIER_PASSING_QUERIES]}).";\n" if defined $simplifier->[SIMPLIFIER_PASSING_QUERIES];
