@@ -1,5 +1,13 @@
 query:
-	SELECT group_by_3 , aggregate_list , window_list_3 FROM from_clause where_clause GROUP BY group_by_3
+	select
+;
+
+explain:
+	EXPLAIN select
+;
+
+select:
+    SELECT group_by_3 , aggregate_list , window_list_3 FROM from_clause where_clause GROUP BY group_by_3 order_3
 ;
 
 aggregate_list:
@@ -9,11 +17,17 @@ aggregate_list:
 ;
 
 aggregate_item:
-	aggregate_func ( expr )
+	ROUND( aggregate_func ( expr )::NUMERIC , 2 )
 ;
 
 aggregate_func:
-	MIN | MAX | COUNT | SUM
+	AVG | MIN | MAX | COUNT | SUM
+	# | JSONB_AGG https://github.com/MaterializeInc/materialize/issues/24432
+	| STDDEV | STDDEV_POP
+	# | STDDEV_SAMP https://github.com/MaterializeInc/materialize/issues/24433
+	| VARIANCE
+	| VAR_POP
+	| VAR_SAMP
 ;
 
 expr:
@@ -27,26 +41,36 @@ window_list_3:
 window_func_3:
 	ROW_NUMBER() OVER ( partition_3 order_3 rows ) |
 	DENSE_RANK() OVER ( partition_3 order_3 rows ) |
+	RANK() OVER ( partition_3 order_3 rows ) |
+	LEAD( item_3 , CAST(item_3 AS INTEGER) , item_3 ) OVER ( partition_3 order_3 rows ) |
 	LAG( item_3 , CAST(item_3 AS INTEGER) , item_3 ) OVER ( partition_3 order_3 rows ) |
 	FIRST_VALUE(item_3) OVER ( partition_3 order_3 rows ) |
-	LAST_VALUE(item_3) OVER ( partition_3 order_3 rows )
+	LAST_VALUE(item_3) OVER ( partition_3 order_3 rows ) |
+    ROUND( aggregate_func ( distinct item_3 ) filter OVER (partition_3 order_3 rows )::NUMERIC , 2 )
+;
+
+filter:
+     | FILTER ( WHERE item_3 > _digit )
+;
+
+distinct:
+# not supported for window functions
+#    | DISTINCT
 ;
 
 rows:
-	ROWS BETWEEN row_first AND row_second
+	ROWS BETWEEN row_first AND row_second |
+	ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW |
+	ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
 ;
 
 row_first:
 	CURRENT ROW |
-	UNBOUNDED PRECEDING |
-	_digit PRECEDING |
-	_digit FOLLOWING
+	_digit PRECEDING
 ;
 
 row_second:
 	CURRENT ROW |
-	UNBOUNDED FOLLOWING |
-        _digit PRECEDING |
 	_digit FOLLOWING
 ;
 
@@ -90,7 +114,7 @@ from_clause:
 	table_name AS a1, table_name AS a2 |
 	table_name AS a1 left_right JOIN table_name AS a2 USING ( col_list ) |
 	table_name AS a1 left_right JOIN table_name AS a2 ON ( join_cond_list ) |
-	table_name AS a1 , LATERAL (SELECT wf1 AS f1, wf2 AS f2 FROM ( query ) AS q ) AS a2
+	table_name AS a1 , LATERAL (SELECT wf1 AS f1, wf2 AS f2 FROM ( select ) AS q ) AS a2
 ;
 
 where_clause:
@@ -98,8 +122,8 @@ where_clause:
 ;
 
 subquery:
-	EXISTS ( query ) |
-	alias . col_name IN ( SELECT wf FROM ( query ) AS s )
+	EXISTS ( select ) |
+	alias . col_name IN ( SELECT wf FROM ( select ) AS s )
 ;
 
 
@@ -125,7 +149,7 @@ alias:
 ;
 
 table_name:
-	t1 | t2
+	t1 | t2 | pk1 | pk2
 ;
 
 col_list:
