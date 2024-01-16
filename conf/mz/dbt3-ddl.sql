@@ -75,6 +75,8 @@ CREATE TABLE customer (
 CREATE INDEX pk_customer_custkey ON customer (c_custkey);
 CREATE INDEX fk_customer_nationkey ON customer (c_nationkey ASC);
 
+CREATE MATERIALIZED VIEW customer_pk AS SELECT DISTINCT ON (c_custkey) c_custkey, c_name, c_address, c_nationkey, c_phone,  c_acctbal, c_mktsegment, c_comment FROM customer;
+
 CREATE TABLE orders (
     o_orderkey       integer,
     o_custkey        integer NOT NULL,
@@ -88,8 +90,9 @@ CREATE TABLE orders (
 );
 
 CREATE INDEX pk_orders_orderkey ON orders (o_orderkey);
-
 CREATE INDEX fk_orders_custkey ON orders (o_custkey ASC);
+
+CREATE MATERIALIZED VIEW orders_pk AS SELECT DISTINCT ON (o_orderkey) o_orderkey, o_custkey, o_orderstatus,  o_totalprice, o_orderdate , o_orderpriority ,  o_clerk , o_shippriority , o_comment FROM orders;
 
 CREATE TABLE lineitem (
     l_orderkey       integer NOT NULL,
