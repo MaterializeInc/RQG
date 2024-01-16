@@ -18,39 +18,45 @@
 #
 
 query:
-	select
+	simple_select
+;
+
+explain:
+	EXPLAIN query
+;
+
+simple_select:
+	{ $ cols = 0; "" } select
 ;
 
 select:
 	select_l_o | select_l_o_c
-# | select_r_n_s_ps_l_o_c | select_p_ps_s_n_r | select_p_ps_l_o_c_r_n_s;
-# | currency_select_p_ps_s_l_o_c
+# Longer join chains TBD
+#	select_r_n_s_ps_l_o_c | select_p_ps_s_n_r | select_p_ps_l_o_c_r_n_s | currency_select_p_ps_s_l_o_c
 ;
-
-#	select_r_n_s_ps_l_o_c | select_p_ps_s_n_r | select_p_ps_l_o_c_r_n_s | currency_select_p_ps_s_l_o_c;
 
 select_l_o:
 	SELECT select_list_l_o join_l_o WHERE where_l_o order_by_1_2 |
 	SELECT aggregate_list_l_o join_l_o WHERE where_l_o |
-	SELECT field_l_o , aggregate_list_l_o join_l_o WHERE where_l_o GROUP BY 1 order_by_1 |
-	SELECT field_l_o , field_l_o , aggregate_list_l_o join_l_o WHERE where_l_o GROUP BY 1 , 2 order_by_1_2
+	SELECT field_l_o AS alias , aggregate_list_l_o join_l_o WHERE where_l_o GROUP BY 1 order_by_1 |
+	SELECT field_l_o AS alias , field_l_o AS alias , aggregate_list_l_o join_l_o WHERE where_l_o GROUP BY 1 , 2 order_by_1_2
 ;
 
 aggregate_list_l_o:
-	aggregate field_l_o ) , aggregate field_l_o ) |
-	aggregate field_l_o ) , aggregate_list_l_o
+	aggregate field_l_o ) AS alias , aggregate field_l_o ) AS alias |
+	aggregate field_l_o ) AS alias , aggregate_list_l_o
 ;
 
 select_l_o_c:
 	SELECT select_list_l_o_c join_l_o_c WHERE where_l_o_c order_by_1_2 |
 	SELECT aggregate_list_l_o_c join_l_o_c WHERE where_l_o |
-	SELECT field_l_o_c , aggregate_list_l_o_c join_l_o_c WHERE where_l_o GROUP BY 1 order_by_1 |
-	SELECT field_l_o_c , field_l_o_c , aggregate_list_l_o_c join_l_o_c WHERE where_l_o_c GROUP BY 1 , 2 order_by_1_2
+	SELECT field_l_o_c AS alias , aggregate_list_l_o_c join_l_o_c WHERE where_l_o GROUP BY 1 order_by_1 |
+	SELECT field_l_o_c AS alias , field_l_o_c AS alias , aggregate_list_l_o_c join_l_o_c WHERE where_l_o_c GROUP BY 1 , 2 order_by_1_2
 ;
 
 aggregate_list_l_o_c:
-	aggregate field_l_o_c ) , aggregate field_l_o_c ) |
-	aggregate field_l_o_c ) , aggregate_list_l_o_c
+	aggregate field_l_o_c ) AS alias , aggregate field_l_o_c ) AS alias |
+	aggregate field_l_o_c ) AS alias , aggregate_list_l_o_c
 ;
 
 
@@ -96,36 +102,37 @@ order_by_1_2:
 	| | | | | | ORDER BY 1 | ORDER BY 2 | ORDER BY 1 , 2 ;	# 30% of queries have ORDER BY on two columns
 
 join_l_o:
-	FROM lineitem, orders |
-	FROM lineitem join_type orders ON ( l_orderkey = o_orderkey ) |
-	FROM lineitem join_type orders ON ( cond_multitable_l_o )
+#	FROM lineitem, orders |
+	FROM lineitem join_type orders_source ON ( l_orderkey = o_orderkey ) |
+	FROM lineitem join_type orders_source ON ( cond_multitable_l_o )
 ;
 
 join_l_o_c:
 #	FROM lineitem, orders, customer |
-	FROM lineitem join_type orders ON ( l_orderkey = o_orderkey ) join_type customer ON ( o_custkey = c_custkey ) |
-	FROM lineitem join_type orders ON ( cond_multitable_l_o ) join_type customer ON ( o_custkey = c_custkey ) |
-	FROM lineitem join_type orders ON ( l_orderkey = o_orderkey ) join_type customer ON ( cond_multitable_o_c )
+	FROM lineitem join_type orders_source ON ( l_orderkey = o_orderkey ) join_type customer_source ON ( o_custkey = c_custkey ) |
+	FROM lineitem join_type orders_source ON ( cond_multitable_l_o ) join_type customer_source ON ( o_custkey = c_custkey ) |
+	FROM lineitem join_type orders_source ON ( l_orderkey = o_orderkey ) join_type customer_source ON ( cond_multitable_o_c )
 ;
 
 join_r_n_s_ps_l_o_c:
-	FROM region join_type nation ON ( r_regionkey = n_regionkey ) join_type supplier ON ( s_nationkey = n_nationkey ) join_type partsupp ON ( s_suppkey = ps_suppkey ) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders ON ( l_orderkey = o_orderkey ) join_type customer ON ( o_custkey = c_custkey ) ;
+	FROM region join_type nation ON ( r_regionkey = n_regionkey ) join_type supplier ON ( s_nationkey = n_nationkey ) join_type partsupp ON ( s_suppkey = ps_suppkey ) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders_source ON ( l_orderkey = o_orderkey ) join_type customer_source ON ( o_custkey = c_custkey ) ;
 
 join_p_ps_s_n_r:
 	FROM part join_type partsupp ON ( p_partkey = ps_partkey ) join_type supplier ON ( ps_suppkey = s_suppkey ) join_type nation ON ( s_nationkey = n_nationkey ) join_type region ON ( n_regionkey = r_regionkey ) ;
 
 join_p_ps_l_o_c_r_n_s:
-	FROM part join_type partsupp ON ( p_partkey = ps_partkey ) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders ON ( l_orderkey = o_orderkey ) join_type customer ON ( o_custkey = c_custkey ) join_type nation ON ( c_nationkey = n_nationkey ) join_type supplier ON ( s_nationkey = n_nationkey ) join_type region ON ( n_regionkey = r_regionkey ) ;
+	FROM part join_type partsupp ON ( p_partkey = ps_partkey ) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders_source ON ( l_orderkey = o_orderkey ) join_type customer_source ON ( o_custkey = c_custkey ) join_type nation ON ( c_nationkey = n_nationkey ) join_type supplier ON ( s_nationkey = n_nationkey ) join_type region ON ( n_regionkey = r_regionkey ) ;
 
 join_p_ps_s_l_o_c:
-	FROM part join_type partsupp ON ( p_partkey = ps_partkey ) join_type supplier ON (s_suppkey = ps_suppkey) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders ON ( l_orderkey = o_orderkey ) join_type customer ON ( o_custkey = c_custkey ) ;
+	FROM part join_type partsupp ON ( p_partkey = ps_partkey ) join_type supplier ON (s_suppkey = ps_suppkey) join_type lineitem ON ( partsupp_lineitem_join_cond ) join_type orders_source ON ( l_orderkey = o_orderkey ) join_type customer_source ON ( o_custkey = c_custkey ) ;
 	
 join_type:
-	JOIN | JOIN | JOIN | JOIN | outer_join
+	JOIN | outer_join
 ;
 
 outer_join:
 	LEFT JOIN | RIGHT JOIN
+# | FULL OUTER JOIN
 ;
 
 partsupp_lineitem_join_cond:
@@ -140,21 +147,27 @@ lineitem_date_field:
 	l_shipDATE | l_commitDATE | l_receiptDATE ;
 
 select_list_r_n_s_ps_l_o_c:
-	*
+	* |
+	field_r_n_s_ps_l_o_c , field_r_n_s_ps_l_o_c | field_r_n_s_ps_l_o_c , select_list_r_n_s_ps_l_o_c
 ;
-#	field_r_n_s_ps_l_o_c , field_r_n_s_ps_l_o_c | field_r_n_s_ps_l_o_c , select_list_r_n_s_ps_l_o_c ;
 
 field_r_n_s_ps_l_o_c:
 	field_r | field_n | field_s | field_ps | field_l | field_o | field_c ;
 
 select_list_l_o:
-	field_l_o, field_l_o |
-	field_l_o, select_list_l_o
+	field_l_o AS alias , field_l_o AS alias |
+	field_l_o AS alias , select_list_l_o
+;
+
+select_list_l_o_noalias:
+	field_l_o , field_l_o |
+	field_l_o , select_list_l_o_noalias
 ;
 
 select_list_l_o_c:
-	field_l_o_c, field_l_o_c |
-	field_l_o_c, select_list_l_o_c
+	field_l_o_c AS alias , field_l_o_c AS alias
+# |
+#	field_l_o_c AS alias , select_list_l_o_c
 ;
 
 field_l_o:
@@ -162,14 +175,14 @@ field_l_o:
 	field_l | field_o |
 	field_l | field_o |
 	field_l | field_o |
-	field_multitable_l_o
+	field_multitable_l_o |
+	CASE ( orderkey_scalar_subquery ) WHEN 1 THEN ( orderkey_scalar_subquery ) ELSE ( orderkey_scalar_subquery ) END
 ;
 
 field_multitable_l_o:
 	o_totalprice - l_extendedprice
-# |
-#	CONCAT( o_comment , l_comment ) | #  https://github.com/MaterializeInc/materialize/issues/5579
-#	l_shipdate - o_orderdate  # https://github.com/MaterializeInc/materialize/issues/6187
+# | CONCAT( o_comment , l_comment ) | #  https://github.com/MaterializeInc/materialize/issues/5579
+	| l_shipdate - o_orderdate  # https://github.com/MaterializeInc/materialize/issues/6187
 ;
 
 field_l_o_c:
@@ -211,8 +224,8 @@ field_l:
 	l_orderkey | l_partkey | l_suppkey | l_linenumber | l_shipDATE | l_commitDATE | l_receiptDATE | expr_l ;
 
 expr_l:
-	l_quantity * l_extendedprice
-# |	l_shipdate - l_commitdate # https://github.com/MaterializeInc/materialize/issues/5965
+	l_quantity * l_extendedprice |
+	l_shipdate - l_commitdate
 ;
 
 field_o:
@@ -239,8 +252,7 @@ aggregate:
 #
 
 preserving_aggregate:
-	MIN( | MAX( | AVG(
-	# | SUM( distinct
+	MIN( | MAX( | AVG( | SUM( distinct
 ;
 
 distinct:
@@ -302,7 +314,7 @@ and_or:
 ;
 
 any_all:
-	ANY | ALL |
+	ANY | ALL
 ;
 
 plus_minus:
@@ -310,7 +322,7 @@ plus_minus:
 ;
 
 interval_type:
-	DAYS | MONTHS
+	DAY | MONTH
 ;
 
 #
@@ -392,7 +404,7 @@ cond_o_custkey:
 	o_custkey custkey_clause |
 	o_custkey custkey_clause |
 	o_custkey custkey_clause |
-	not EXISTS ( custkey_scalar_subquery )
+	not EXISTS ( custkey_subquery )
 ;
 
 cond_c:
@@ -413,7 +425,7 @@ cond_r:
 #
 
 comp_op:
-        = | = | = | = | != | > | >= | < | <= | <> ;
+    = | = | != | > | >= | < | <= | <> ;
 
 not:
 	| | | | | | | | | NOT ;
@@ -476,7 +488,8 @@ linenumber_range:
 
 partkey_clause:
 	partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery |
-	partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_subquery
+	partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery | partkey_clause_nosubquery |
+	partkey_clause_subquery
 ;
 
 partkey_clause_nosubquery:
@@ -500,7 +513,7 @@ partkey_item:
 	_digit | 200 | 0 ;
 
 partkey_clause_subquery:
-	comp_op any_all ( partkey_scalar_subquery ) |
+	comp_op any_all ( partkey_subquery ) |
 	not IN ( partkey_subquery )
 ;
 
@@ -536,7 +549,8 @@ commitdate_clause:
 
 orderkey_clause:
 	orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery |
-	orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_subquery
+	orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery | orderkey_clause_nosubquery |
+	orderkey_clause_subquery
 ;
 
 orderkey_clause_nosubquery:
@@ -555,8 +569,10 @@ orderkey_range:
 	_digit | _tinyint_unsigned ;
 
 orderkey_clause_subquery:
-	comp_op any_all ( orderkey_scalar_subquery ) |
-	not IN ( orderkey_subquery_union )
+	comp_op ( orderkey_scalar_subquery ) |
+	comp_op any_all ( orderkey_subquery )
+# |
+#	not IN ( orderkey_subquery_union )
 ;
 
 # QUANTITY
@@ -580,7 +596,8 @@ quantity_range:
 
 custkey_clause:
 	custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery |
-	custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_subquery
+	custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery | custkey_clause_nosubquery |
+	custkey_clause_subquery
 ;
 
 custkey_clause_nosubquery:
@@ -600,7 +617,8 @@ custkey_range:
 	_digit | _tinyint_unsigned ;
 
 custkey_clause_subquery:
-	comp_op any_all ( custkey_scalar_subquery ) |
+	comp_op ( custkey_scalar_subquery ) |
+	comp_op any_all ( custkey_subquery ) |
 	not IN ( custkey_subquery )
 ;
 
@@ -692,7 +710,7 @@ orderkey_subquery:
 l_orderkey_scalar_subquery:
 	SELECT distinct l_orderkey join_l_o WHERE where_l_o exactly_one_row |
 	SELECT preserving_aggregate l_orderkey ) join_l_o WHERE where_l_o |
-	SELECT preserving_aggregate l_orderkey ) join_l_o WHERE where_l_o GROUP BY select_list_l_o ORDER BY 1 asc_desc LIMIT 1 |
+	SELECT preserving_aggregate l_orderkey ) join_l_o WHERE where_l_o GROUP BY select_list_l_o_noalias ORDER BY 1 asc_desc LIMIT 1 |
 	SELECT distinct l_orderkey FROM lineitem WHERE where_l_o exactly_one_row
 ;
 
@@ -717,23 +735,35 @@ partkey_subquery:
 o_orderkey_scalar_subquery:
 	SELECT o_orderkey join_l_o WHERE where_l_o exactly_one_row |
 	SELECT preserving_aggregate o_orderkey ) join_l_o WHERE where_l_o |
-	SELECT o_orderkey FROM orders WHERE where_l_o exactly_one_row
+	SELECT o_orderkey FROM orders_source WHERE where_l_o exactly_one_row
 ;
 
 o_orderkey_subquery:
 	SELECT distinct o_orderkey join_l_o WHERE where_l_o |
 	SELECT o_orderkey join_l_o WHERE where_l_o GROUP BY o_orderkey |
-	SELECT o_orderkey FROM orders WHERE where_l_o
+	SELECT o_orderkey FROM orders_source WHERE where_l_o
 ;
 
 custkey_scalar_subquery:
 	SELECT o_custkey join_l_o WHERE where_l_o exactly_one_row |
 	SELECT preserving_aggregate o_custkey ) join_l_o WHERE where_l_o |
-	SELECT o_custkey FROM orders WHERE where_l_o exactly_one_row
+	SELECT o_custkey FROM orders_source WHERE where_l_o exactly_one_row
 ;
 
 custkey_subquery:
 	SELECT distinct o_custkey join_l_o WHERE where_l_o |
 	SELECT o_custkey join_l_o WHERE where_l_o GROUP BY o_custkey |
-	SELECT o_custkey FROM orders WHERE where_l_o
+	SELECT o_custkey FROM orders_source WHERE where_l_o
+;
+
+alias:
+        {"col".++$cols}
+;
+
+orders_source:
+    orders | orders_pk
+;
+
+customer_source:
+    customer | customer_pk
 ;
