@@ -6,7 +6,7 @@
 #
 
 thread1_init:
-    set_serializable ; DROP TABLE IF EXISTS t1 CASCADE ; CREATE TABLE t1 ( t1_definition ) ; INSERT INTO t1 VALUES insert_list 
+    set_serializable ; DROP TABLE IF EXISTS t1 CASCADE ; CREATE TABLE t1 ( t1_definition ) ; CREATE INDEX i1 ON t1 ( index_definition ) ; INSERT INTO t1 VALUES insert_list
 ;
 
 query_init:
@@ -17,10 +17,16 @@ set_serializable:
     SET transaction_isolation = SERIALIZABLE
 ;
 
+explain:
+	EXPLAIN wmr_select
+;
+
 query:
-    WITH MUTUALLY RECURSIVE
-    cte_list
-    select
+	wmr_select
+;
+
+wmr_select:
+	WITH MUTUALLY RECURSIVE cte_list select
 ;
 
 insert_list:
@@ -32,28 +38,33 @@ insert_row:
 ;
 
 values_list:
-    0 , 0 , 0
+    0::INTEGER , 0::INTEGER , 0::INTEGER
 ;
 
 select:
     SELECT * FROM c1 UNION SELECT * FROM c2 UNION SELECT * FROM c3
 ;
 
-
-
 cte_list:
     c1 cte_col_list AS ( cte_definition ) , c2 cte_col_list AS ( cte_definition ) , c3 cte_col_list AS ( cte_definition )
 ;
 
 cte_name:
-    c1 | c2 | c3 | t1
+    c1 | c2 | c3
 ;
+
 col_name:
     f1 | f2 | f3
 ;
 
 t1_definition:
     f1 INTEGER PRIMARY KEY , f2 INTEGER NOT NULL, f3 INTEGER
+;
+
+index_definition:
+	f1 |
+	f1 , f2 |
+	f1 , f2 , f3
 ;
 
 cte_col_list:
@@ -65,6 +76,7 @@ cte_select_list:
 ;
 
 cte_select_list_alias:
+    a1.f1 , a2.f2 , a1.f3 |
     cte_expr_alias AS f1 , cte_expr_alias AS f2 , cte_expr_alias AS f3
 ;
 
@@ -83,8 +95,17 @@ all:
 cte_constant:
    SELECT values_list |
    SELECT * FROM (VALUES ( values_list )) |
-   SELECT * FROM table_name |
+   SELECT col_list FROM table_name |
    SELECT cte_select_list_aggregate FROM table_name
+;
+
+col_list:
+    f1 ,  f2 , f3 |
+    col AS f1 , col AS f2 , col AS f3
+;
+
+col:
+    col_name | 0
 ;
 
 aggregate_func:
@@ -93,11 +114,15 @@ aggregate_func:
 
 
 cte_select:
-    ( SELECT cte_select_list FROM cte_name WHERE cte_where order_by_limit ) |
-    ( SELECT cte_select_list_alias FROM cte_name AS a1 join_type JOIN cte_name AS a2 USING ( col_name ) WHERE cte_where_alias ) |
-    ( SELECT cte_select_list_alias FROM cte_name AS a1 join_type JOIN ( cte_select ) AS a2 USING ( col_name ) WHERE cte_where_alias ) |
-    SELECT cte_select_list_aggregate FROM cte_name WHERE cte_where |
-    ( SELECT f1 + 1 AS f1 , aggregate_func( f2 ) + 1 AS f2, aggregate_func( f3 ) + 1 AS f3 FROM cte_name WHERE cte_where GROUP BY f1 )
+    ( SELECT distinct cte_select_list FROM cte_name WHERE cte_where order_by_limit ) |
+    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN cte_name AS a2 USING ( col_name ) WHERE cte_where_alias ) |
+    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN ( cte_select ) AS a2 USING ( col_name ) WHERE cte_where_alias ) |
+    SELECT distinct cte_select_list_aggregate FROM cte_name WHERE cte_where |
+    ( SELECT distinct f1 + 1 AS f1 , aggregate_func( f2 ) + 1 AS f2, aggregate_func( f3 ) + 1 AS f3 FROM cte_name WHERE cte_where GROUP BY f1 )
+;
+
+distinct:
+    | DISTINCT
 ;
 
 join_type:
@@ -125,7 +150,8 @@ asc_desc:
 ;
 
 cte_where:
-     col_name < 100 AND ( cte_cond_list )
+    col_name < 100 |
+    col_name < 100 AND ( cte_cond_list )
 ;
 
 cte_where_alias:
@@ -143,13 +169,13 @@ cte_cond_list_alias:
 ;
 
 cte_expr:
-    col_name + const |
-    col_name + col_name + 1
+    col_name + const 
+	# | col_name + col_name + 1 https://github.com/MaterializeInc/materialize/issues/24451
 ;
 
 cte_expr_alias:
-    a1 . col_name + const |
-    a1 . col_name + a1 . col_name + 1
+    a1 . col_name + const
+    # | a1 . col_name + a1 . col_name + 1 https://github.com/MaterializeInc/materialize/issues/24451
 ;
 
 cte_cond:
@@ -185,8 +211,12 @@ not:
 ;
 
 const:
-    _digit + 1 |
-    _tinyint_unsigned + 1
+    # We list the 1-9 manually here so that zero is not used, thus guaranteeing
+    # that the WMR query always makes forward progress.
+    # At the same time, we can not use the previous trick, _digit + 1, due to #24451
+    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    # | _digit + 1  https://github.com/MaterializeInc/materialize/issues/24451
+    # | _tinyint_unsigned + 1 https://github.com/MaterializeInc/materialize/issues/24451
 ;
 
 table_name:
