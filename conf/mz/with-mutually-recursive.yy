@@ -26,7 +26,7 @@ query:
 ;
 
 wmr_select:
-	WITH MUTUALLY RECURSIVE cte_list select
+	WITH MUTUALLY RECURSIVE (RETURN AT RECURSION LIMIT 10000) cte_list select
 ;
 
 insert_list:
