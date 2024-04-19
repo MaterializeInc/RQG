@@ -421,8 +421,19 @@ sub workerProcess {
     $self->stopChild(STATUS_ENVIRONMENT_FAILURE) if not defined $mixer;
         
     my $worker_result = 0;
-        
-    foreach my $i (1..$self->config->queries) {
+    my $last_progress = 0.0;
+    my $step_progress = 0.1;
+
+    say("Executing queries.");
+
+    my $total_queries = $self->config->queries;
+    foreach my $i (1..$total_queries) {
+        my $curr_progress = ($i / $total_queries);
+        if ($curr_progress >= $last_progress + $step_progress) {
+            $last_progress = $last_progress + $step_progress;
+            say("Worker #$worker_id: executing query $i/$total_queries ($last_progress done).");
+        }
+
         my $query_result = $mixer->next();
         if ($query_result > STATUS_CRITICAL_FAILURE) {
             undef $mixer;	# so that destructors are called
@@ -430,19 +441,31 @@ sub workerProcess {
         }
 
         $worker_result = $query_result if $query_result > $worker_result && $query_result > STATUS_TEST_FAILURE;
+        
+        my $time = time();
+        if ($time > $self->[GT_TEST_END] and $i < $total_queries) {
+            say("Worker #$worker_id: Interrupting at $i/$total_queries due to duration timeout.")
+        }
+
         last if $query_result == STATUS_EOF;
         last if $ctrl_c == 1;
-        last if time() > $self->[GT_TEST_END];
+        last if $time > $self->[GT_TEST_END];
     }
+
+    say("Stopping executors.");
         
     foreach my $executor (@executors) {
         $executor->disconnect;
         undef $executor;
     }
 
+    say("Stopped all executors.");
+
     # Forcefully deallocate the Mixer so that Validator destructors are called
     undef $mixer;
     undef $self->[GT_QUERY_FILTERS];
+
+    say("Destructing validators.");
         
     if ($worker_result > 0) {
         say("Child worker process completed with error code $worker_result.");
