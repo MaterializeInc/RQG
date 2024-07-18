@@ -111,7 +111,7 @@ aggregate_item_no_window:
 	aggregate_func ( distinct select_item ) |
 	aggregate_func ( distinct select_item ) |
 	aggregate_func ( distinct select_item ) |
-	aggregate_func ( distinct select_item )
+	aggregate_func ( select_item )
 ;
 
 aggregate_func:
