@@ -108,8 +108,7 @@ aggregate_list:
 ;
 
 aggregate_item_no_window:
-    # aggregation that returns a number (needs substring with start at index 3 to cut \x away (yes, three characters needed for that), limit the length to stay in range of INT8)
-    TRANSLATE(SUBSTRING(SHA256(STRING_AGG(select_item::TEXT, '-' ORDER BY select_item)::BYTEA)::TEXT, 3, 16), 'abcdef', '123456')::INT8 |
+    SUM(LENGTH(select_item::TEXT)) |
 	ARRAY_LENGTH ( array_generating_aggregate_func ( select_item ), 1 ) |
 	aggregate_func ( distinct select_item ) |
 	aggregate_func ( distinct select_item ) |
