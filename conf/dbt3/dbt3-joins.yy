@@ -18,7 +18,7 @@
 #
 
 query:
-	select_r_n_s_ps_l_o_c | select_p_ps_s_n_r | select_p_ps_l_o_c_r_n_s | currency_select_p_ps_s_l_o_c;
+	SET statement_timeout = '60s'; select_r_n_s_ps_l_o_c | select_p_ps_s_n_r | select_p_ps_l_o_c_r_n_s | currency_select_p_ps_s_l_o_c;
 
 # region -> nation -> supplier -> partsupp -> lineitem -> orders -> customer
 
