@@ -85,7 +85,7 @@ cte_select_list_aggregate:
 ;
 
 cte_definition:
-    cte_constant UNION all cte_select
+    cte_constant UNION cte_select
 ;
 
 all:
