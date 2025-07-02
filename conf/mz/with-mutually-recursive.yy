@@ -6,15 +6,7 @@
 #
 
 thread1_init:
-    set_serializable ; DROP TABLE IF EXISTS t1 CASCADE ; CREATE TABLE t1 ( t1_definition ) ; CREATE INDEX i1 ON t1 ( index_definition ) ; INSERT INTO t1 VALUES insert_list
-;
-
-query_init:
-    set_serializable
-;
-
-set_serializable:
-    SET transaction_isolation = SERIALIZABLE
+    DROP TABLE IF EXISTS t1 CASCADE ; CREATE TABLE t1 ( t1_definition ) ; CREATE INDEX i1 ON t1 ( index_definition ) ; INSERT INTO t1 VALUES insert_list
 ;
 
 explain:
