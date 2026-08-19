@@ -126,10 +126,6 @@ left_select_aggregate:
     aggregate ( distinct col_name )
 ;
 
-aggegate:
-    MIN | MAX | COUNT | SUM
-;
-
 alias:
     f1 | f2
 ;

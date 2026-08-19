@@ -163,9 +163,7 @@ sub RESULTSET_IS_SINGLE_BOOLEAN_TRUE {
                 ($#{$result->data()->[0]} != 0) ||
                 (!$result->data()->[0]->[0])
         ) {
-                use Data::Dumper;
                 print Dumper $result;
-                die;
                 return STATUS_CONTENT_MISMATCH;
         } else {
                 return STATUS_OK;
