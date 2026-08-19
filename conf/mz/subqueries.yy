@@ -1,3 +1,11 @@
+# Correlated and uncorrelated subqueries in the projection and in predicates
+# (scalar, IN, EXISTS, ANY/ALL, aggregates), over the conf/mz/simple.sql
+# tables, compared against Postgres. Every select_item is a scalar subquery,
+# so the projection is entirely subquery-driven.
+#
+# AVG/SUM stay deterministic because the dataset holds only integer-valued
+# doubles, which sum exactly in any order.
+
 explain:
 	EXPLAIN select
 ;
@@ -32,11 +40,6 @@ outer_join_item:
 	table_name | table_name | derived_table
 ;
 
-outer_condition_list:	
-	outer_condition |
-	outer_condition and_or outer_condition
-;
-
 inner_join_list:
 	table_name AS inner1 , table_name AS inner2 |
 	t1 AS inner1 left_right JOIN t2 AS inner2 ON ( inner_condition )
@@ -69,11 +72,12 @@ inner_condition:
 
 outer_condition:
 	outer_column comparison_op outer_value |
+	outer_column comparison_op any_all return_one_many |
 	outer_column BETWEEN outer_value AND outer_value |
 	outer_column IS not NULL |
 	outer_column = return_one_one |
 	outer_column not IN return_one_many |
-	not EXISTS return_one_many 
+	not EXISTS return_one_many
 ;
 
 outer_value:
@@ -90,9 +94,30 @@ inner_outer_column:
 	inner_column | outer_column
 ;
 
+# The single ordered output column keeps LIMIT/OFFSET picks deterministic:
+# ties can only occur between identical values.
+
 return_one_one:
-	( SELECT inner_column FROM inner_join_list WHERE inner_outer_condition_list ORDER BY 1 LIMIT one_zero ) |
-	( SELECT inner1 . f1 additional_expression FROM inner_join_list WHERE inner_outer_condition_list ORDER BY 1 LIMIT one_zero )
+	( SELECT inner_column FROM inner_join_list WHERE inner_outer_condition_list ORDER BY 1 asc_desc_nulls LIMIT one_zero offset_opt ) |
+	( SELECT inner1 . f1 additional_expression FROM inner_join_list WHERE inner_outer_condition_list ORDER BY 1 asc_desc_nulls LIMIT one_zero ) |
+	( SELECT aggregate_func ( inner_column ) FROM inner_join_list WHERE inner_outer_condition_list ) |
+	( SELECT aggregate_func ( inner_column ) FILTER ( WHERE inner_outer_condition ) FROM inner_join_list WHERE inner_outer_condition_list )
+;
+
+asc_desc_nulls:
+	| ASC | DESC | ASC NULLS FIRST | DESC NULLS LAST
+;
+
+offset_opt:
+	| | OFFSET _digit
+;
+
+aggregate_func:
+	MIN | MAX | COUNT | SUM | AVG
+;
+
+any_all:
+	ANY | ALL
 ;
 
 one_zero:
@@ -107,16 +132,20 @@ return_two_many:
 	( SELECT distinct inner_column AS f1 , inner_column AS f2 FROM inner_join_list WHERE inner_outer_condition_list )
 ;
 
+# DISTINCT ON stays deterministic because the ORDER BY totally orders every
+# group.
+
 derived_table:
-	( SELECT distinct inner_column AS f1 , inner_column AS f2 FROM inner_join_list WHERE inner_condition_list )
+	( SELECT distinct inner_column AS f1 , inner_column AS f2 FROM inner_join_list WHERE inner_condition_list ) |
+	( SELECT DISTINCT ON ( f1 ) f1 , f2 FROM table_name ORDER BY f1 asc_desc , f2 asc_desc )
+;
+
+asc_desc:
+	ASC | DESC
 ;
 
 inner_value:
 	value | inner_column
-;
-
-outer_value:
-	value | outer_column
 ;
 
 inner_outer_value:

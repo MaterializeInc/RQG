@@ -1,8 +1,7 @@
-SET cluster=default;
-
-DROP SCHEMA public CASCADE;
-
-CREATE SCHEMA public;
+-- A tiny two-table dataset engineered for outer-join, anti-join and
+-- deduplication edge cases. Loaded into both Materialize and the reference
+-- implementation, so every statement must be valid in both dialects and the
+-- whole file must be idempotent (it is loaded with ON_ERROR_STOP).
 
 DROP TABLE IF EXISTS t1 CASCADE;
 DROP TABLE IF EXISTS t2 CASCADE;

@@ -59,9 +59,14 @@ sub init {
 
 my %caches;
 
+# NOTE: Entries here are converted to STATUS_OK with an empty result, so the
+# comparison validators then see a clean success on this server. 42P01
+# (undefined_table) used to be listed to tolerate DROP TABLE on non-existing
+# tables, but Postgres also raises it as "missing FROM-clause entry" for any
+# reference to an out-of-scope table alias, turning every such generated
+# query into a spurious "error status mismatch" against a server that
+# reports the error honestly. Grammars use DROP TABLE IF EXISTS instead.
 my %acceptedErrors = (
-    "42P01" => 1,# DROP TABLE on non-existing table is accepted since
-                 # tests rely on non-standard MySQL DROP IF EXISTS;
     "42P06" => 1 # Schema already exists
     );
 
@@ -207,7 +212,12 @@ sub findStatus {
     } elsif (($state eq '42000') || ($state eq '42601')) {
 	return STATUS_SYNTAX_ERROR;
     } else {
-	return $self->SUPER::findStatus(@_);
+	# NOTE: not SUPER::findStatus(@_): that passes $self twice, the parent
+	# then classifies the stringified object reference instead of $state,
+	# and every error collapses to STATUS_UNKNOWN_ERROR. Two servers
+	# rejecting a query for entirely different reasons then always compare
+	# as equal.
+	return $self->SUPER::findStatus($state);
     }
 }
 

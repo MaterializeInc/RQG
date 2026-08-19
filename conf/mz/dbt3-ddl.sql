@@ -1,5 +1,20 @@
-DROP SCHEMA public CASCADE;
-CREATE SCHEMA public;
+-- DBT-3 (TPC-H) schema. The data is loaded separately from
+-- conf/mz/dbt3-s0.0001.dump, and the Postgres reference
+-- additionally needs conf/mz/dbt3-ddl-refresh-mvs.sql because its
+-- materialized views are created here, before the data arrives.
+--
+-- Loaded into both Materialize and the reference implementation with
+-- ON_ERROR_STOP, so every statement must be valid in both dialects and the
+-- whole file must be idempotent.
+
+DROP TABLE IF EXISTS nation CASCADE;
+DROP TABLE IF EXISTS region CASCADE;
+DROP TABLE IF EXISTS part CASCADE;
+DROP TABLE IF EXISTS supplier CASCADE;
+DROP TABLE IF EXISTS partsupp CASCADE;
+DROP TABLE IF EXISTS customer CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS lineitem CASCADE;
 
 CREATE TABLE nation (
     n_nationkey  integer,
@@ -10,7 +25,7 @@ CREATE TABLE nation (
 
 CREATE INDEX pk_nation_nationkey ON nation (n_nationkey);
 
-CREATE INDEX fk_nation_regionkey ON nation (n_regionkey ASC);
+CREATE INDEX fk_nation_regionkey ON nation (n_regionkey);
 
 CREATE TABLE region  (
     r_regionkey  integer,
@@ -46,7 +61,7 @@ CREATE TABLE supplier (
 
 CREATE INDEX pk_supplier_suppkey ON supplier (s_suppkey);
 
-CREATE INDEX fk_supplier_nationkey ON supplier (s_nationkey ASC);
+CREATE INDEX fk_supplier_nationkey ON supplier (s_nationkey);
 
 CREATE TABLE partsupp (
     ps_partkey     integer NOT NULL,
@@ -58,8 +73,8 @@ CREATE TABLE partsupp (
 
 CREATE INDEX pk_partsupp_partkey_suppkey ON partsupp (ps_partkey, ps_suppkey);
 
-CREATE INDEX fk_partsupp_partkey ON partsupp (ps_partkey ASC);
-CREATE INDEX fk_partsupp_suppkey ON partsupp (ps_suppkey ASC);
+CREATE INDEX fk_partsupp_partkey ON partsupp (ps_partkey);
+CREATE INDEX fk_partsupp_suppkey ON partsupp (ps_suppkey);
 
 CREATE TABLE customer (
     c_custkey     integer,
@@ -73,7 +88,7 @@ CREATE TABLE customer (
 );
 
 CREATE INDEX pk_customer_custkey ON customer (c_custkey);
-CREATE INDEX fk_customer_nationkey ON customer (c_nationkey ASC);
+CREATE INDEX fk_customer_nationkey ON customer (c_nationkey);
 
 CREATE MATERIALIZED VIEW customer_pk AS SELECT DISTINCT ON (c_custkey) c_custkey, c_name, c_address, c_nationkey, c_phone,  c_acctbal, c_mktsegment, c_comment FROM customer;
 
@@ -90,7 +105,7 @@ CREATE TABLE orders (
 );
 
 CREATE INDEX pk_orders_orderkey ON orders (o_orderkey);
-CREATE INDEX fk_orders_custkey ON orders (o_custkey ASC);
+CREATE INDEX fk_orders_custkey ON orders (o_custkey);
 
 CREATE MATERIALIZED VIEW orders_pk AS SELECT DISTINCT ON (o_orderkey) o_orderkey, o_custkey, o_orderstatus,  o_totalprice, o_orderdate , o_orderpriority ,  o_clerk , o_shippriority , o_comment FROM orders;
 
@@ -115,7 +130,7 @@ CREATE TABLE lineitem (
 
 CREATE INDEX pk_lineitem_orderkey_linenumber ON lineitem (l_orderkey, l_linenumber);
 
-CREATE INDEX fk_lineitem_orderkey ON lineitem (l_orderkey ASC);
-CREATE INDEX fk_lineitem_partkey ON lineitem (l_partkey ASC);
-CREATE INDEX fk_lineitem_suppkey ON lineitem (l_suppkey ASC);
-CREATE INDEX fk_lineitem_partsuppkey ON lineitem (l_partkey ASC, l_suppkey ASC);
+CREATE INDEX fk_lineitem_orderkey ON lineitem (l_orderkey);
+CREATE INDEX fk_lineitem_partkey ON lineitem (l_partkey);
+CREATE INDEX fk_lineitem_suppkey ON lineitem (l_suppkey);
+CREATE INDEX fk_lineitem_partsuppkey ON lineitem (l_partkey, l_suppkey);

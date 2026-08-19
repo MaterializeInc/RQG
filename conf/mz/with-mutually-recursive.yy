@@ -2,12 +2,13 @@
 # This grammar generates valid WITH MUTUALLY RECURSIVE queries that are hopefully halting,
 # that is, they never produce divergent dataflows that never terminate. This is ensured
 # by always incrementing the values in the participating columns until the col_name < 100 condition is
-# hit.
+# hit. RETURN AT RECURSION LIMIT bounds the runtime of queries that oscillate anyway.
 #
-
-thread1_init:
-    DROP TABLE IF EXISTS t1 CASCADE ; CREATE TABLE t1 ( t1_definition ) ; CREATE INDEX i1 ON t1 ( index_definition ) ; INSERT INTO t1 VALUES insert_list
-;
+# The t1 table lives in conf/mz/wmr.sql. Table DDL must not run from an init
+# rule here: an init rule executes while other workers are already issuing
+# queries, and that race produced spurious result differences at more than
+# one thread (database-issues#9439).
+#
 
 explain:
 	EXPLAIN wmr_select
@@ -17,16 +18,19 @@ query:
 	wmr_select
 ;
 
+# The designed queries converge in about 100 iterations (values start below
+# 10 and grow by at least 1 per round until the col < 100 guards close), so a
+# limit of 200 does not change their results. Queries that oscillate (the
+# cross-CTE EXISTS conditions make that possible) run to the limit, and at
+# 10000 iterations a single one takes tens of seconds, so the large limit is
+# kept as a rare variant instead of the default.
+
 wmr_select:
-	WITH MUTUALLY RECURSIVE (RETURN AT RECURSION LIMIT 10000) cte_list select
+	WITH MUTUALLY RECURSIVE (RETURN AT RECURSION LIMIT recursion_limit) cte_list select
 ;
 
-insert_list:
-    insert_row
-;
-
-insert_row:
-    ( values_list )
+recursion_limit:
+	200 | 200 | 200 | 200 | 200 | 200 | 200 | 10000
 ;
 
 values_list:
@@ -34,29 +38,19 @@ values_list:
 ;
 
 select:
-    SELECT * FROM c1 UNION SELECT * FROM c2 UNION SELECT * FROM c3
+    SELECT * FROM c1 UNION SELECT * FROM c2 UNION SELECT * FROM c3 UNION SELECT * FROM c4
 ;
 
 cte_list:
-    c1 cte_col_list AS ( cte_definition ) , c2 cte_col_list AS ( cte_definition ) , c3 cte_col_list AS ( cte_definition )
+    c1 cte_col_list AS ( cte_definition ) , c2 cte_col_list AS ( cte_definition ) , c3 cte_col_list AS ( cte_definition ) , c4 cte_col_list AS ( cte_definition )
 ;
 
 cte_name:
-    c1 | c2 | c3
+    c1 | c2 | c3 | c4
 ;
 
 col_name:
     f1 | f2 | f3
-;
-
-t1_definition:
-    f1 INTEGER PRIMARY KEY , f2 INTEGER NOT NULL, f3 INTEGER
-;
-
-index_definition:
-	f1 |
-	f1 , f2 |
-	f1 , f2 , f3
 ;
 
 cte_col_list:
@@ -87,6 +81,7 @@ all:
 cte_constant:
    SELECT values_list |
    SELECT * FROM (VALUES ( values_list )) |
+   SELECT * FROM (VALUES ( values_list ) , ( const , const , const )) |
    SELECT col_list FROM table_name |
    SELECT cte_select_list_aggregate FROM table_name
 ;
@@ -100,17 +95,27 @@ col:
     col_name | 0
 ;
 
+# MIN and MAX both pick an existing value, so the surrounding + 1 keeps the
+# forward-progress guarantee. COUNT and SUM would produce values unrelated to
+# the existing ones and make convergence much slower.
+
 aggregate_func:
-    MIN
+    MIN | MAX
 ;
 
 
 cte_select:
     ( SELECT distinct cte_select_list FROM cte_name WHERE cte_where order_by_limit ) |
-    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN cte_name AS a2 USING ( col_name ) WHERE cte_where_alias ) |
-    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN ( cte_select ) AS a2 USING ( col_name ) WHERE cte_where_alias ) |
+    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN cte_name AS a2 USING ( using_col_list ) WHERE cte_where_alias ) |
+    ( SELECT distinct cte_select_list_alias FROM cte_name AS a1 join_type JOIN ( cte_select ) AS a2 USING ( using_col_list ) WHERE cte_where_alias ) |
     SELECT distinct cte_select_list_aggregate FROM cte_name WHERE cte_where |
     ( SELECT distinct f1 + 1 AS f1 , aggregate_func( f2 ) + 1 AS f2, aggregate_func( f3 ) + 1 AS f3 FROM cte_name WHERE cte_where GROUP BY f1 )
+;
+
+using_col_list:
+    col_name | col_name | col_name |
+    f1 , f2 |
+    f1 , f2 , f3
 ;
 
 distinct:
@@ -161,13 +166,13 @@ cte_cond_list_alias:
 ;
 
 cte_expr:
-    col_name + const 
-	# | col_name + col_name + 1 https://github.com/MaterializeInc/materialize/issues/24451
+    col_name + const
+	# | col_name + col_name + 1 https://github.com/MaterializeInc/database-issues/issues/7301
 ;
 
 cte_expr_alias:
     a1 . col_name + const
-    # | a1 . col_name + a1 . col_name + 1 https://github.com/MaterializeInc/materialize/issues/24451
+    # | a1 . col_name + a1 . col_name + 1 https://github.com/MaterializeInc/database-issues/issues/7301
 ;
 
 cte_cond:
@@ -175,10 +180,15 @@ cte_cond:
     col_name IS not NULL
 ;
 
+# The correlated EXISTS puts subquery decorrelation inside a recursive
+# dataflow. It only filters, so the termination argument is untouched, and
+# RETURN AT RECURSION LIMIT bounds any oscillation NOT EXISTS introduces.
+
 cte_cond_alias:
     alias . col_name cmp_op const |
     alias . col_name cmp_op alias . col_name |
-    alias . col_name IS not NULL
+    alias . col_name IS not NULL |
+    not EXISTS ( SELECT * FROM cte_name AS e1 WHERE e1 . col_name cmp_op alias . col_name )
 ;
 
 cmp_op:
@@ -205,10 +215,11 @@ not:
 const:
     # We list the 1-9 manually here so that zero is not used, thus guaranteeing
     # that the WMR query always makes forward progress.
-    # At the same time, we can not use the previous trick, _digit + 1, due to #24451
+    # At the same time, we can not use the previous trick, _digit + 1, due to
+    # https://github.com/MaterializeInc/database-issues/issues/7301
     1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-    # | _digit + 1  https://github.com/MaterializeInc/materialize/issues/24451
-    # | _tinyint_unsigned + 1 https://github.com/MaterializeInc/materialize/issues/24451
+    # | _digit + 1  https://github.com/MaterializeInc/database-issues/issues/7301
+    # | _tinyint_unsigned + 1 https://github.com/MaterializeInc/database-issues/issues/7301
 ;
 
 table_name:
